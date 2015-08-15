@@ -1,0 +1,98 @@
+#!/bin/bash
+set -e
+
+SOURCE_DIR=`rpm -E '%_sourcedir'`
+
+[ -d "$SOURCE_DIR" ] || rpmdev-setuptree 2>/dev/null || :
+
+# Setup a build directory for the given srpm
+function init () {
+  local srpm="$1"
+  if [ ! -f "$srpm" ]; then
+    echo "Given srpm does not exist ($1)" >&2
+    return 1
+  fi
+
+  # check it is an srpm
+  if ! rpm -q --qf "%|SOURCERPM?{no}:{yes}|\n" -p "$srpm" 2>&1 | \
+    grep -q yes; then
+    echo "Given file is not an srpm" >&2
+    return 1
+  fi
+
+  if ! type rpmdev-extract >/dev/null 2>&1; then
+    echo "rpmdev-extract is not installed, aborting." >&2
+    return 1
+  fi
+
+  local temp_dir=`mktemp -d -t xpkg.XXXX`
+  rpmdev-extract -C "$temp_dir" "$srpm"
+  # check count of extracted dirs
+  if [ `ls "${temp_dir}" | wc -l` -ne 1 ]; then
+    echo "Expected one file (dir) under temp dir (${temp_dir})" >&2
+    return 1
+  fi
+  # check it is actually a dir
+  local dir1 dir2
+  dir1=`echo "$temp_dir"/*`
+  if ! [ -d "$dir1" ]; then
+    echo "${dir1} is not a directory" >&2
+    return 1
+  fi
+  # remove temp dir prefix
+  dir2=`basename "$dir1"`
+  if [ -d "$dir2" ]; then
+    echo "Directory already exists for this srpm (${dir2}), aborting" >&2
+    return 1
+  fi
+
+  mkdir -- "${dir2}"
+  if [ `ls "${dir1}"/*.spec | wc -l` -ne 1 ]; then
+    echo "More than one spec file in the srpm!" >&2
+    return 1
+  fi
+  mv "${dir1}"/*.spec "${dir2}"/
+
+  mkdir -- "${dir2}/sources"
+  if ! type spectool >/dev/null 2>&1; then
+    echo "spectool is not installed, aborting" >&2
+    return 1
+  fi
+  local sfiles #source files
+  sfiles=`spectool -l "$dir2"/*.spec | cut -d ' ' -f 2- | egrep -v '(https?|ftp)://'`
+  local oldifs="$IFS"
+  IFS=$'\n'
+  for sfile in $sfiles; do
+    mv -- "${dir1}/${sfile}" "${dir2}/sources/"
+  done
+  IFS="$oldifs"
+  # The remaining sources are remote, move to $SOURCE_DIR
+  mv -- "$dir1"/* "$SOURCE_DIR"/ || :
+  rmdir "$dir1" "$temp_dir"
+}
+
+function process_args () {
+  local cmd="$1"
+  shift
+
+  # getopts loop for any $0 options
+  [ "$cmd" = xpkg ] && while getopts ':' flag; do
+    echo "$OPTARG"
+    shift
+  done
+
+  case "$cmd" in
+    xpkg)
+      process_args "$@"
+      ;;
+    init)
+      $cmd "$@"
+      ;;
+    *)
+      usage
+      return 1
+      ;;
+  esac
+}
+
+process_args `basename $0` "$@"
