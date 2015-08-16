@@ -6,8 +6,15 @@ SRPM_DIR=`rpm -E '%_srcrpmdir'`
 
 [ -d "$SOURCE_DIR" ] || rpmdev-setuptree 2>/dev/null || :
 
-# Setup a build directory for the given srpm
+function _title () {
+  local color=`tput bold; tput setaf 4`
+  local reset=`tput sgr0`
+  local caller=`caller 0 | awk '{print $2}'`
+  echo "${color}==== ${caller^^}${@:+ - }$@${reset}" >&2
+}
+
 function init () {
+  _title "Setup a build directory from given srpm"
   local srpm="$1"
   if [ ! -f "$srpm" ]; then
     echo "Given srpm does not exist ($1)" >&2
@@ -77,28 +84,40 @@ function _print_last_srpm () {
   echo "${SRPM_DIR}/${srpm}"
 }
 
+function _build_srpm () {
+  local spec="$1"
+  rpmbuild -bs --nodeps "$spec"
+}
+
 function prep () {
+  _title "Fetch remote sources and build an srpm"
   local spec=`find . -maxdepth 1 -name "*.spec" | head -1`
-  if rpmbuild -bs --nodeps "$spec" >/dev/null 2>&1; then
-    _print_last_srpm
-    return
-  fi
   spectool -g -R "$spec"
   rsync -a sources/ "$SOURCE_DIR"/
-  rpmbuild -bs --nodeps "$spec"
-  _print_last_srpm
+  _build_srpm "$spec"
+  sums
 }
 
 function deps () {
+  _title "Ensure all BuildRequires are installed"
   local spec=`find . -maxdepth 1 -name "*.spec" | head -1`
+  if ! _build_srpm "$spec" >/dev/null 2>&1; then
+    echo "Cannot build srpm, triggering prep" >&2
+    prep
+  fi
   local srpm
-  srpm=`prep`
+  srpm=`_print_last_srpm`
   sudo yum-builddep "$srpm" || :
 }
 
 function build () {
+  _title "Build rpm(s)"
   local spec=`find . -maxdepth 1 -name "*.spec" | head -1`
-  prep
+  if ! _build_srpm "$spec" >/dev/null 2>&1; then
+    echo "Cannot build srpm, triggering prep" >&2
+    prep
+  fi
+  _verify_sums
   rpmbuild -bb "$spec"
 }
 
@@ -159,6 +178,7 @@ function _promptYn () {
 }
 
 function sums () {
+  _title "Populate or refresh the checksums file"
   local spec=`find . -maxdepth 1 -name "*.spec" | head -1`
   [ -f checksums ] || touch checksums
   checksums_new=`mktemp -t checksums.XXXX`
