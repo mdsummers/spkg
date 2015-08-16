@@ -25,7 +25,7 @@ function init () {
     return 1
   fi
 
-  local temp_dir=`mktemp -d -t xpkg.XXXX`
+  local temp_dir=`mktemp -d -t spkg.XXXX`
   rpmdev-extract -C "$temp_dir" "$srpm"
   # check count of extracted dirs
   if [ `ls "${temp_dir}" | wc -l` -ne 1 ]; then
@@ -76,13 +76,13 @@ function process_args () {
   shift
 
   # getopts loop for any $0 options
-  [ "$cmd" = xpkg ] && while getopts ':' flag; do
+  [ "$cmd" = spkg ] && while getopts ':' flag; do
     echo "$OPTARG"
     shift
   done
 
   case "$cmd" in
-    xpkg)
+    spkg)
       process_args "$@"
       ;;
     init)
