@@ -6,6 +6,32 @@ SRPM_DIR=`rpm -E '%_srcrpmdir'`
 
 [ -d "$SOURCE_DIR" ] || rpmdev-setuptree 2>/dev/null || :
 
+function usage () {
+  cat << EOF
+Usage:
+  spkg init <srpm>
+    Make a build environment from an existing srpm
+
+  spkg prep
+    From an existing build environment. Download remote sources specified in
+    the spec file. Copy all sources to the rpm SOURCES directory.
+
+  spkg sums
+    From an existing build environment. Reevaluate the checksums file based on
+    the current state of the spec file and downloaded sources.
+
+  spkg deps
+    From an existing build environment. Install any missing BuildRequires from
+    the spec file.
+
+  spkg build
+    From an existing build environment. Build rpms using the spec file.
+
+  spkg -h
+    Show this usage
+EOF
+}
+
 function _title () {
   local color=`tput bold; tput setaf 4`
   local reset=`tput sgr0`
@@ -241,8 +267,13 @@ function process_args () {
   shift
 
   # getopts loop for any $0 options
-  [ "$cmd" = spkg ] && while getopts ':' flag; do
-    echo "$OPTARG"
+  [ "$cmd" = spkg ] && while getopts ':h' flag; do
+    case $flag in
+      h)
+        usage
+        exit 0
+        ;;
+    esac
     shift
   done
 
