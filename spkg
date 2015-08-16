@@ -161,34 +161,52 @@ function _promptYn () {
 function sums () {
   local spec=`find . -maxdepth 1 -name "*.spec" | head -1`
   [ -f checksums ] || touch checksums
-  local sname furl fsum fname csum
+  checksums_new=`mktemp -t checksums.XXXX`
+  trap "rm -f ${checksums_new}" EXIT
+  local sname sfile furl fsum fname csum
   while read -r sname furl; do # spectool
     echo "$furl =>"
+    sfile="$SOURCE_DIR"/`basename "$furl"`
+    if ! [ -f "$sfile" ]; then
+      echo "Have not downloaded ${furl} - skipping" >&2
+      continue
+    fi
+    # compute a sum for comparisons
+    csum=`sha256sum "$sfile" | awk '{print $1}'`
     # does it exist in the checksums file?
     local in_checksums=0
     while read -r fsum fname; do
-      echo $fsum $fname
       if [ "$fname" = "`basename "$furl"`" ]; then
-        echo "Checksum already exists."
-        in_checksums=1
+        if [ "$fsum" = "$csum" ]; then
+          echo "Checksum already exists." >&2
+          echo "$fsum $fname" > "$checksums_new"
+          in_checksums=1
+        else
+          echo "Existing checksum does not match, ignoring" >&2
+        fi
       fi
     done < checksums
 
     if [ $in_checksums -ne 1 ]; then
       echo "Is not in the checksums file"
-      local sfile="$SOURCE_DIR"/`basename "$furl"`
-      if [ -f "$sfile" ]; then
-        _print_file_checksums "$sfile"
-        if _promptYn "Add sum to file?"; then
-          csum=`sha256sum "$sfile" | awk '{print $1}'`
-          echo "${csum} `basename $furl`" >> checksums
-        fi
-      else
-        echo "Have not downloaded $furl - cannot compute sum" >&2
+      _print_file_checksums "$sfile"
+      if _promptYn "Add sum to file?"; then
+        echo "${csum} `basename $furl`" >> "$checksums_new"
       fi
     fi
     echo
   done < <(spectool -l "$spec" | egrep '(https?|ftp)://')
+
+  echo "Checking for changes in checksums"
+  if ! diff -u checksums "$checksums_new"; then
+    echo
+    _promptYn "Update checksums file?" && cp -f "$checksums_new" checksums || :
+  else
+    echo "No change in checksums."
+  fi
+  # cleanup
+  trap - EXIT
+  rm -f "$checksums_new"
 }
 
 function process_args () {
