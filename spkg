@@ -100,7 +100,7 @@ function prep () {
   _title "Fetch remote sources and build an srpm"
   local spec=`find . -maxdepth 1 -name "*.spec" | head -1`
   spectool -g -R "$spec"
-  rsync -a sources/ "$SOURCE_DIR"/
+  [ -d sources ] && rsync -a sources/ "$SOURCE_DIR"/ || :
   _build_srpm "$spec"
   sums
 }
