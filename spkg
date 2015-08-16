@@ -66,16 +66,19 @@ function init () {
     echo "spectool is not installed, aborting" >&2
     return 1
   fi
+
+  echo "Moving non-remote sources into place"
   local sfiles #source files
   sfiles=`spectool -l "$dir2"/*.spec | cut -d ' ' -f 2- | egrep -v '(https?|ftp)://'`
   local oldifs="$IFS"
   IFS=$'\n'
   for sfile in $sfiles; do
-    mv -- "${dir1}/${sfile}" "${dir2}/sources/"
+    mv -v -- "${dir1}/${sfile}" "${dir2}/sources/"
   done
   IFS="$oldifs"
-  # The remaining sources are remote, move to $SOURCE_DIR
-  mv -- "$dir1"/* "$SOURCE_DIR"/ || :
+
+  echo "Moving remote sources into SOURCE dir"
+  mv -v -- "$dir1"/* "$SOURCE_DIR"/ || :
   rmdir "$dir1" "$temp_dir"
 }
 
