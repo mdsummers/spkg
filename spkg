@@ -80,6 +80,10 @@ function init () {
   echo "Moving remote sources into SOURCE dir"
   mv -v -- "$dir1"/* "$SOURCE_DIR"/ || :
   rmdir "$dir1" "$temp_dir"
+  cd "${dir2}"
+  echo "Triggering sums"
+  sums
+  echo "New build directory under ${dir2}"
 }
 
 function _print_last_srpm () {
