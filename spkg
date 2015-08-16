@@ -2,6 +2,7 @@
 set -e
 
 SOURCE_DIR=`rpm -E '%_sourcedir'`
+SRPM_DIR=`rpm -E '%_srcrpmdir'`
 
 [ -d "$SOURCE_DIR" ] || rpmdev-setuptree 2>/dev/null || :
 
@@ -71,6 +72,36 @@ function init () {
   rmdir "$dir1" "$temp_dir"
 }
 
+function _print_last_srpm () {
+  local srpm=`ls -1t "$SRPM_DIR" | head -1`
+  echo "${SRPM_DIR}/${srpm}"
+}
+
+function prep () {
+  local spec=`find . -maxdepth 1 -name "*.spec" | head -1`
+  if rpmbuild -bs --nodeps "$spec" >/dev/null 2>&1; then
+    _print_last_srpm
+    return
+  fi
+  spectool -g -R "$spec"
+  rsync -a sources/ "$SOURCE_DIR"/
+  rpmbuild -bs --nodeps "$spec"
+  _print_last_srpm
+}
+
+function deps () {
+  local spec=`find . -maxdepth 1 -name "*.spec" | head -1`
+  local srpm
+  srpm=`prep`
+  sudo yum-builddep "$srpm" || :
+}
+
+function build () {
+  local spec=`find . -maxdepth 1 -name "*.spec" | head -1`
+  prep
+  rpmbuild -bb "$spec"
+}
+
 function process_args () {
   local cmd="$1"
   shift
@@ -85,7 +116,7 @@ function process_args () {
     spkg)
       process_args "$@"
       ;;
-    init)
+    init|prep|deps|build)
       $cmd "$@"
       ;;
     *)
